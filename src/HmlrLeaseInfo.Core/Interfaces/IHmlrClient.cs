@@ -1,6 +1,6 @@
-namespace HmlrLeaseInfo.Core.Interfaces;
-
 using HmlrLeaseInfo.Core.Models;
+
+namespace HmlrLeaseInfo.Core.Interfaces;
 
 /// <summary>
 /// HTTP client for the HMLR mock API.

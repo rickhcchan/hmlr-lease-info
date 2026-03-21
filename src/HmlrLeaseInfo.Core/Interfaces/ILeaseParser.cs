@@ -1,6 +1,6 @@
-namespace HmlrLeaseInfo.Core.Interfaces;
-
 using HmlrLeaseInfo.Core.Models;
+
+namespace HmlrLeaseInfo.Core.Interfaces;
 
 /// <summary>
 /// Parses raw HMLR schedule entries into structured lease data.

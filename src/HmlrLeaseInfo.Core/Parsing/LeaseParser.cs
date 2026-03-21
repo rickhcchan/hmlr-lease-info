@@ -115,7 +115,8 @@ public class LeaseParser : ILeaseParser
                 .Where(s => !string.IsNullOrEmpty(s)));
         }
 
-        int.TryParse(raw.EntryNumber, out int entryNumber);
+        if (!int.TryParse(raw.EntryNumber, out int entryNumber))
+            throw new FormatException($"Invalid entry number: '{raw.EntryNumber}'.");
         DateOnly? entryDate = string.IsNullOrWhiteSpace(raw.EntryDate)
             ? null
             : DateOnly.Parse(raw.EntryDate, System.Globalization.CultureInfo.InvariantCulture);
