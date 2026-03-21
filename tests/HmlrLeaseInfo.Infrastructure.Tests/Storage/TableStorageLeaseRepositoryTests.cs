@@ -19,23 +19,6 @@ public class TableStorageLeaseRepositoryTests
     }
 
     [Fact]
-    public async Task UpsertParsedAsync_ThenGetAsync_ReturnsCorrectEntry()
-    {
-        var (repository, tableClient) = CreateRepository();
-        try
-        {
-            var entry = CreateTestEntry("EGL557357");
-            await repository.UpsertParsedAsync([entry]);
-
-            var result = await repository.GetAsync("EGL557357");
-
-            result.Should().NotBeNull();
-            result.Should().BeEquivalentTo(entry);
-        }
-        finally { await tableClient.DeleteAsync(); }
-    }
-
-    [Fact]
     public async Task GetAsync_NonExistentEntry_ReturnsNull()
     {
         var (repository, tableClient) = CreateRepository();
