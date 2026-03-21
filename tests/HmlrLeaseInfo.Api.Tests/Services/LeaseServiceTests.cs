@@ -64,24 +64,7 @@ public class LeaseServiceTests
     // 404 path — fresh sync, title absent
 
     [Fact]
-    public async Task GetLeaseAsync_NotInRepo_FreshSync_Returns404()
-    {
-        _leaseRepo.GetAsync("MISSING", Arg.Any<CancellationToken>())
-            .Returns((ParsedNoticeOfLease?)null);
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns(new SyncMetadata(
-                CompletedAt: DateTime.UtcNow,
-                EntriesProcessed: 5,
-                ErrorMessage: null));
-
-        var service = CreateService();
-        var result = await service.GetLeaseAsync("MISSING");
-
-        result.Should().BeOfType<NotFound<LeaseResponse>>();
-    }
-
-    [Fact]
-    public async Task GetLeaseAsync_NotInRepo_FreshSync_ResponseContainsLastSyncAt()
+    public async Task GetLeaseAsync_NotInRepo_FreshSync_Returns404WithLastSyncAt()
     {
         var syncTime = DateTime.UtcNow;
         _leaseRepo.GetAsync("MISSING", Arg.Any<CancellationToken>())
@@ -96,7 +79,7 @@ public class LeaseServiceTests
         var result = await service.GetLeaseAsync("MISSING");
 
         var notFound = result.Should().BeOfType<NotFound<LeaseResponse>>().Subject;
-        notFound.Value!.LastSyncAt.Should().BeCloseTo(syncTime, TimeSpan.FromSeconds(1));
+        notFound.Value!.LastSyncAt.Should().Be(syncTime);
         notFound.Value.Message.Should().Contain("not present");
     }
 
