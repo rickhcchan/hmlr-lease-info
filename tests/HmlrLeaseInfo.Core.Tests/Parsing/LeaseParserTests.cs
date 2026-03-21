@@ -72,7 +72,15 @@ public class LeaseParserTests
         result.Notes[0].Should().StartWith("NOTE:");
     }
 
-    // Defensive edge case
+    // Defensive edge cases
+
+    [Fact]
+    public void Parse_InvalidEntryNumber_ThrowsFormatException()
+    {
+        var raw = new RawNoticeOfLease("abc", "", "Schedule of Notices of Leases", new List<string> { "some text" });
+        var act = () => _parser.Parse(raw);
+        act.Should().Throw<FormatException>().WithMessage("*abc*");
+    }
 
     [Fact]
     public void Parse_EmptyEntryText_ReturnsEmptyFields()

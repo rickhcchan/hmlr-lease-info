@@ -1,5 +1,6 @@
 namespace HmlrLeaseInfo.Infrastructure.Storage;
 
+using System.Globalization;
 using System.Text.Json;
 using Azure;
 using Azure.Data.Tables;
@@ -42,7 +43,7 @@ public class LeaseTableEntity : ITableEntity
     public ParsedNoticeOfLease ToDomain()
     {
         DateOnly? entryDate = EntryDate is not null
-            ? DateOnly.Parse(EntryDate)
+            ? DateOnly.ParseExact(EntryDate, "O", CultureInfo.InvariantCulture)
             : null;
 
         var notes = JsonSerializer.Deserialize<List<string>>(NotesJson) ?? [];

@@ -9,7 +9,7 @@ using Microsoft.Extensions.Options;
 
 /// <summary>
 /// HTTP client for fetching raw schedule data from the HMLR mock API.
-/// Uses Basic Auth with lowercase credentials.
+/// Uses Basic Auth with the configured credentials.
 /// </summary>
 public class HmlrApiClient(HttpClient httpClient, IOptions<HmlrApiSettings> options) : IHmlrClient
 {
@@ -22,7 +22,7 @@ public class HmlrApiClient(HttpClient httpClient, IOptions<HmlrApiSettings> opti
         var credentials = Convert.ToBase64String(
             Encoding.UTF8.GetBytes($"{settings.Username}:{settings.Password}"));
 
-        var request = new HttpRequestMessage(HttpMethod.Get, "/schedules");
+        var request = new HttpRequestMessage(HttpMethod.Get, "schedules");
         request.Headers.Authorization = new AuthenticationHeaderValue("Basic", credentials);
 
         var response = await httpClient.SendAsync(request, cancellationToken);

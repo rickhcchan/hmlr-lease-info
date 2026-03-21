@@ -7,7 +7,6 @@ using FluentAssertions;
 using HmlrLeaseInfo.Core.Models;
 using HmlrLeaseInfo.Infrastructure.Http;
 using Microsoft.Extensions.Options;
-using NSubstitute;
 
 public class HmlrApiClientTests
 {
@@ -19,7 +18,7 @@ public class HmlrApiClientTests
     };
 
     [Fact]
-    public async Task GetSchedulesAsync_SetsBasicAuthHeader_LowercaseCredentials()
+    public async Task GetSchedulesAsync_SetsBasicAuthHeader_WithConfiguredCredentials()
     {
         HttpRequestMessage? capturedRequest = null;
         var handler = new FakeHttpHandler(request =>

@@ -19,8 +19,8 @@ public class AzuriteFixture : IAsyncLifetime
                 FileName = "azurite",
                 Arguments = "--silent",
                 UseShellExecute = false,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true
+                RedirectStandardOutput = false,
+                RedirectStandardError = false
             }
         };
 
@@ -32,10 +32,18 @@ public class AzuriteFixture : IAsyncLifetime
 
     public Task DisposeAsync()
     {
-        if (_process is { HasExited: false })
+        if (_process is null)
+            return Task.CompletedTask;
+
+        try
         {
-            _process.Kill(entireProcessTree: true);
+            if (!_process.HasExited)
+                _process.Kill(entireProcessTree: true);
+        }
+        finally
+        {
             _process.Dispose();
+            _process = null;
         }
         return Task.CompletedTask;
     }
