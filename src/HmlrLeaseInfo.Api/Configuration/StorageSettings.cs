@@ -6,5 +6,5 @@ namespace HmlrLeaseInfo.Api.Configuration;
 public class StorageSettings
 {
     /// <summary>Connection string for Azure Storage (Azurite for local dev).</summary>
-    public string ConnectionString { get; set; } = "UseDevelopmentStorage=true";
+    public string ConnectionString { get; set; } = string.Empty;
 }
