@@ -1,7 +1,14 @@
+using HmlrLeaseInfo.Api.Interfaces;
+
 var builder = WebApplication.CreateBuilder(args);
+
+// DI registrations will be added in Task 6
+builder.Services.AddScoped<ILeaseService, HmlrLeaseInfo.Api.Services.LeaseService>();
+
 var app = builder.Build();
 
-app.MapGet("/", () => "Hello World!");
+app.MapGet("/{titleNumber}", async (string titleNumber, ILeaseService leaseService, CancellationToken ct) =>
+    await leaseService.GetLeaseAsync(titleNumber, ct));
 
 app.Run();
 
