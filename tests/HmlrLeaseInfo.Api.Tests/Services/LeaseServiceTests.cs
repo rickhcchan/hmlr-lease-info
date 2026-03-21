@@ -14,10 +14,6 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using NSubstitute;
 
-/// <summary>
-/// Unit tests for LeaseService decision logic.
-/// Mocks repos and queue, uses real in-memory HybridCache.
-/// </summary>
 public class LeaseServiceTests
 {
     private readonly ILeaseRepository _leaseRepo = Substitute.For<ILeaseRepository>();
@@ -45,8 +41,6 @@ public class LeaseServiceTests
             Options.Create(_syncOptions));
     }
 
-    // 200 path — lease found
-
     [Fact]
     public async Task GetLeaseAsync_RepoHasEntry_Returns200WithData()
     {
@@ -61,8 +55,9 @@ public class LeaseServiceTests
         ok.Value!.LesseesTitle.Should().Be("EGL557357");
     }
 
-    // 404 path — fresh sync, title absent
-
+    /// <summary>
+    /// Fresh sync = CompletedAt within DataFreshness. Title absent → 404, no queue message.
+    /// </summary>
     [Fact]
     public async Task GetLeaseAsync_NotInRepo_FreshSync_Returns404WithLastSyncAt()
     {
@@ -81,95 +76,50 @@ public class LeaseServiceTests
         var notFound = result.Should().BeOfType<NotFound<LeaseResponse>>().Subject;
         notFound.Value!.LastSyncAt.Should().Be(syncTime);
         notFound.Value.Message.Should().Contain("not present");
-    }
-
-    // 202 path — never synced
-
-    [Fact]
-    public async Task GetLeaseAsync_NotInRepo_NeverSynced_Returns202()
-    {
-        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
-            .Returns((ParsedNoticeOfLease?)null);
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns((SyncMetadata?)null);
-
-        var service = CreateService();
-        var result = await service.GetLeaseAsync("EGL557357");
-
-        result.Should().BeAssignableTo<IStatusCodeHttpResult>()
-            .Which.StatusCode.Should().Be(202);
-    }
-
-    [Fact]
-    public async Task GetLeaseAsync_NeverSynced_EnqueuesSyncMessage()
-    {
-        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
-            .Returns((ParsedNoticeOfLease?)null);
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns((SyncMetadata?)null);
-
-        var service = CreateService();
-        await service.GetLeaseAsync("EGL557357");
-
-        await _queueClient.Received().SendMessageAsync(
-            Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    // 202 path — stale sync
-
-    [Fact]
-    public async Task GetLeaseAsync_NotInRepo_StaleSync_Returns202()
-    {
-        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
-            .Returns((ParsedNoticeOfLease?)null);
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns(new SyncMetadata(
-                CompletedAt: DateTime.UtcNow.AddMinutes(-60),
-                EntriesProcessed: 5,
-                ErrorMessage: null));
-
-        var service = CreateService();
-        var result = await service.GetLeaseAsync("EGL557357");
-
-        result.Should().BeAssignableTo<IStatusCodeHttpResult>()
-            .Which.StatusCode.Should().Be(202);
-    }
-
-    [Fact]
-    public async Task GetLeaseAsync_StaleSync_EnqueuesSyncMessage()
-    {
-        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
-            .Returns((ParsedNoticeOfLease?)null);
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns(new SyncMetadata(
-                CompletedAt: DateTime.UtcNow.AddMinutes(-60),
-                EntriesProcessed: 5,
-                ErrorMessage: null));
-
-        var service = CreateService();
-        await service.GetLeaseAsync("EGL557357");
-
-        await _queueClient.Received().SendMessageAsync(
-            Arg.Any<string>(), Arg.Any<CancellationToken>());
-    }
-
-    // Fresh sync should NOT enqueue
-
-    [Fact]
-    public async Task GetLeaseAsync_FreshSync_DoesNotEnqueue()
-    {
-        _leaseRepo.GetAsync("MISSING", Arg.Any<CancellationToken>())
-            .Returns((ParsedNoticeOfLease?)null);
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns(new SyncMetadata(
-                CompletedAt: DateTime.UtcNow,
-                EntriesProcessed: 5,
-                ErrorMessage: null));
-
-        var service = CreateService();
-        await service.GetLeaseAsync("MISSING");
-
         await _queueClient.DidNotReceive().SendMessageAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Never synced = SyncMetadata is null. Triggers queue message and returns 202.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaseAsync_NotInRepo_NeverSynced_Returns202AndEnqueues()
+    {
+        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
+            .Returns((ParsedNoticeOfLease?)null);
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns((SyncMetadata?)null);
+
+        var service = CreateService();
+        var result = await service.GetLeaseAsync("EGL557357");
+
+        result.Should().BeAssignableTo<IStatusCodeHttpResult>()
+            .Which.StatusCode.Should().Be(202);
+        await _queueClient.Received().SendMessageAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Stale sync = CompletedAt older than DataFreshness. Triggers queue message and returns 202.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaseAsync_NotInRepo_StaleSync_Returns202AndEnqueues()
+    {
+        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
+            .Returns((ParsedNoticeOfLease?)null);
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns(new SyncMetadata(
+                CompletedAt: DateTime.UtcNow.AddMinutes(-60),
+                EntriesProcessed: 5,
+                ErrorMessage: null));
+
+        var service = CreateService();
+        var result = await service.GetLeaseAsync("EGL557357");
+
+        result.Should().BeAssignableTo<IStatusCodeHttpResult>()
+            .Which.StatusCode.Should().Be(202);
+        await _queueClient.Received().SendMessageAsync(
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 

@@ -10,9 +10,6 @@ using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
-/// <summary>
-/// Thin endpoint tests verifying routing and serialization for GET /{titleNumber}.
-/// </summary>
 public class LeaseEndpointTests : IClassFixture<WebApplicationFactory<Program>>
 {
     private readonly WebApplicationFactory<Program> _factory;
