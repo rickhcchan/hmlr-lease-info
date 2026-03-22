@@ -30,7 +30,12 @@ public class LeaseService(
             cancellationToken: cancellationToken);
 
         if (lease is not null)
+        {
+            if (await IsSyncStale(options, cancellationToken))
+                await EnqueueSyncThrottled(options, cancellationToken);
+
             return Results.Ok(lease);
+        }
 
         // HybridCache caches null by default — remove so next call re-queries the repo
         await cache.RemoveAsync($"lease:{titleNumber}", cancellationToken);
@@ -45,6 +50,21 @@ public class LeaseService(
                 LastSyncAt: syncMetadata.CompletedAt));
         }
 
+        await EnqueueSyncThrottled(options, cancellationToken);
+
+        return Results.Accepted(value: new LeaseResponse(
+            "Data is being synced. Please retry shortly."));
+    }
+
+    private async Task<bool> IsSyncStale(SyncOptions options, CancellationToken cancellationToken)
+    {
+        var syncMetadata = await syncMetadataRepository.GetAsync(cancellationToken);
+        return syncMetadata?.CompletedAt is null
+               || DateTime.UtcNow - syncMetadata.CompletedAt.Value >= options.DataFreshness;
+    }
+
+    private async Task EnqueueSyncThrottled(SyncOptions options, CancellationToken cancellationToken)
+    {
         await cache.GetOrCreateAsync(
             "sync-requested",
             async ct =>
@@ -54,8 +74,5 @@ public class LeaseService(
             },
             new HybridCacheEntryOptions { Expiration = options.RequestThrottle },
             cancellationToken: cancellationToken);
-
-        return Results.Accepted(value: new LeaseResponse(
-            "Data is being synced. Please retry shortly."));
     }
 }
