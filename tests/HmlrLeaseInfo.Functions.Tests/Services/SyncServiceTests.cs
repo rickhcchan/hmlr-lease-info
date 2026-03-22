@@ -27,8 +27,6 @@ public class SyncServiceTests
         new(_hmlrClient, _leaseParser, _leaseRepo, _syncRepo,
             Options.Create(_syncOptions), _logger);
 
-    // -- Freshness gate --
-
     /// <summary>
     /// When last sync completed within DataFreshness, skip the sync entirely.
     /// </summary>
@@ -87,8 +85,6 @@ public class SyncServiceTests
             .GetSchedulesAsync(Arg.Any<CancellationToken>());
     }
 
-    // -- Happy path --
-
     /// <summary>
     /// Fetches raw entries, parses each one, and upserts all parsed results.
     /// </summary>
@@ -140,8 +136,6 @@ public class SyncServiceTests
                 m.ErrorMessage == null),
             Arg.Any<CancellationToken>());
     }
-
-    // -- Error handling --
 
     /// <summary>
     /// When the HMLR API throws, records the error without setting CompletedAt.
