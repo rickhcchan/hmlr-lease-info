@@ -148,20 +148,22 @@ dotnet test tests/HmlrLeaseInfo.Infrastructure.Tests/
 
 ### End-to-end smoke test
 
-Start all four backend services (Azurite, mock API, Function, API) as described in [Running](#running), then:
+**Setup:** Start all four backend services with a clean database (no prior Azurite data) as described in [Running](#running). Dev config uses `DataFreshness: 2min`, `RequestThrottle: 1min` for faster testing.
+
+| # | Scenario | Command | Expected | Status |
+|---|----------|---------|----------|--------|
+| 1 | No auth header | `curl -s -o /dev/null -w "%{http_code}" http://localhost:5010/EGL557357` | `401` | PASS |
+| 2 | Wrong credentials | `curl -s -o /dev/null -w "%{http_code}" -u wrong:creds http://localhost:5010/EGL557357` | `401` | PASS |
+| 3 | First request (cold, never synced) | `curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357` | `202` — triggers async sync via queue | PASS |
+| 4 | Retry after sync completes (~5s) | Same as #3 | `200` — returns parsed lease data | PASS |
+| 5 | All five title numbers | Loop below | All `200` — sync fetches all entries in one pass | PASS |
+| 6 | Non-existent title (fresh sync) | `curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/NONEXISTENT` | `404` with `lastSyncAt` timestamp | PASS |
+| 7 | Existing title after DataFreshness expires (2min) | Same as #3, wait 2+ minutes | `200` — stale-while-revalidate returns cached data, silently re-syncs | PASS |
+| 8 | Immediate follow-up (within RequestThrottle) | Same as #3 | `200` — no duplicate queue message (throttled) | PASS |
+
+**Test #5 — all titles:**
 
 ```bash
-# Step 1: First request — expect 202 (triggers sync)
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357
-# {"message":"Data is being synced. Please retry shortly.","lastSyncAt":null}
-# HTTP 202
-
-# Step 2: Wait a few seconds for the sync to complete, then retry — expect 200
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357
-# {"entryNumber":1,"entryDate":null,...,"lesseesTitle":"EGL557357","notes":[]}
-# HTTP 200
-
-# Step 3: All five title numbers from the mock API should return 200
 for t in EGL557357 TGL24029 TGL27196 TGL383606 TGL513556; do
   echo -n "$t: "; curl -s -u username:password -o /dev/null -w "%{http_code}" http://localhost:5010/$t; echo
 done
@@ -170,12 +172,15 @@ done
 # TGL27196: 200
 # TGL383606: 200
 # TGL513556: 200
-
-# Step 4: Unknown title — expect 404
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/NONEXISTENT
-# {"message":"Entry not present as of last sync.","lastSyncAt":"..."}
-# HTTP 404
 ```
+
+**Key behaviours verified:**
+- Basic Auth rejects unauthenticated/invalid requests (tests 1–2)
+- Cold start triggers async sync, returns 202 until data is ready (tests 3–4)
+- Single sync populates all entries from the HMLR API (test 5)
+- Fresh sync returns 404 for absent titles instead of re-syncing (test 6)
+- Stale data triggers background re-sync while still returning 200 immediately (test 7)
+- Request throttle prevents duplicate queue messages within the throttle window (test 8)
 
 ## Configuration
 
