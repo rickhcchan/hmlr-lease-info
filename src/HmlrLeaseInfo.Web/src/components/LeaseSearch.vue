@@ -18,6 +18,7 @@ function onSubmit() {
       v-model="titleNumber"
       type="text"
       placeholder="Enter title number (e.g. EGL557357)"
+      aria-label="Title number"
     />
     <button type="submit" :disabled="!titleNumber.trim()">Search</button>
   </form>
