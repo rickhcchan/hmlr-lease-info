@@ -1,17 +1,24 @@
 using Azure.Data.Tables;
 using Azure.Storage.Queues;
+using HmlrLeaseInfo.Api.Auth;
 using HmlrLeaseInfo.Api.Configuration;
 using HmlrLeaseInfo.Api.Interfaces;
 using HmlrLeaseInfo.Api.Services;
 using HmlrLeaseInfo.Core.Configuration;
 using HmlrLeaseInfo.Core.Interfaces;
 using HmlrLeaseInfo.Infrastructure.Storage;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.Configure<StorageSettings>(builder.Configuration.GetSection("Storage"));
 builder.Services.Configure<SyncOptions>(builder.Configuration.GetSection("Sync"));
+builder.Services.Configure<AuthSettings>(builder.Configuration.GetSection("Auth"));
+
+builder.Services.AddAuthentication("Basic")
+    .AddScheme<AuthenticationSchemeOptions, BasicAuthHandler>("Basic", null);
+builder.Services.AddAuthorization();
 
 builder.Services.AddHybridCache();
 
@@ -42,8 +49,12 @@ builder.Services.AddScoped<ILeaseService, LeaseService>();
 
 var app = builder.Build();
 
+app.UseAuthentication();
+app.UseAuthorization();
+
 app.MapGet("/{titleNumber}", async (string titleNumber, ILeaseService leaseService, CancellationToken ct) =>
-    await leaseService.GetLeaseAsync(titleNumber, ct));
+    await leaseService.GetLeaseAsync(titleNumber, ct))
+    .RequireAuthorization();
 
 app.Run();
 
