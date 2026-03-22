@@ -184,7 +184,7 @@ Sync timing is controlled by `SyncOptions`, shared between the API and Function:
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `DataFreshness` | `00:30:00` | How long parsed data is considered fresh. Controls cache TTL and re-sync triggers. |
-| `RequestThrottle` | `00:05:00` | Reserved for future request throttling. Not currently enforced. |
+| `RequestThrottle` | `00:05:00` | Minimum interval between queue messages. Prevents flooding the queue with duplicate sync requests. |
 
 Values use `TimeSpan` format (`hh:mm:ss`). In the Function's `local.settings.json`, use double-underscore notation:
 
@@ -199,7 +199,7 @@ Features added on top of the base task:
 
 - **Async sync via Azure Queue + Function** — non-blocking `202` response with queue-triggered background parsing
 - **HybridCache with stampede protection** — `GetOrCreateAsync` ensures only one factory runs per cache key, even under concurrent load
-- **2-layer sync protection** — single-instance Function (`batchSize: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
+- **3-layer sync protection** — API request throttle (`HybridCache` deduplicates queue sends) → single-instance Function (`batchSize: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
 - **Freshness-based re-sync** — stale data (> `DataFreshness`) returns 202 instead of 404, automatically triggering a re-sync
 - **Self-healing on failure** — queue auto-retries failed syncs; if all retries exhaust, normal API usage queues a fresh message
 - **Additive/update-only sync** — upserts by LesseesTitle, never deletes. Safe for legal documents that persist once published

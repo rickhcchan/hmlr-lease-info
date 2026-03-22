@@ -124,6 +124,26 @@ public class LeaseServiceTests
     }
 
     /// <summary>
+    /// First 202 enqueues a sync message, second 202 within RequestThrottle window should not enqueue again.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaseAsync_SecondRequestWithinThrottle_DoesNotEnqueueAgain()
+    {
+        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
+            .Returns((ParsedNoticeOfLease?)null);
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns((SyncMetadata?)null);
+
+        var service = CreateService();
+
+        await service.GetLeaseAsync("EGL557357");
+        await service.GetLeaseAsync("EGL557357");
+
+        await _queueClient.Received(1).SendMessageAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// Repo returns null (triggers 202), then returns data on next call → should get 200, not cached null.
     /// </summary>
     [Fact]

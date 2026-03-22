@@ -32,6 +32,7 @@ public class LeaseService(
         if (lease is not null)
             return Results.Ok(lease);
 
+        // HybridCache caches null by default — remove so next call re-queries the repo
         await cache.RemoveAsync($"lease:{titleNumber}", cancellationToken);
 
         var syncMetadata = await syncMetadataRepository.GetAsync(cancellationToken);
@@ -44,7 +45,16 @@ public class LeaseService(
                 LastSyncAt: syncMetadata.CompletedAt));
         }
 
-        await queueClient.SendMessageAsync("sync", cancellationToken);
+        await cache.GetOrCreateAsync(
+            "sync-requested",
+            async ct =>
+            {
+                await queueClient.SendMessageAsync("sync", ct);
+                return true;
+            },
+            new HybridCacheEntryOptions { Expiration = options.RequestThrottle },
+            cancellationToken: cancellationToken);
+
         return Results.Accepted(value: new LeaseResponse(
             "Data is being synced. Please retry shortly."));
     }
