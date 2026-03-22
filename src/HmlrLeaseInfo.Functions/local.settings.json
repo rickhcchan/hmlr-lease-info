@@ -1,0 +1,10 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+    "HmlrApi__BaseUrl": "http://localhost:5203",
+    "HmlrApi__Username": "username",
+    "HmlrApi__Password": "password"
+  }
+}

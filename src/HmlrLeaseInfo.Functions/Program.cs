@@ -8,9 +8,15 @@ using HmlrLeaseInfo.Infrastructure.Http;
 using HmlrLeaseInfo.Infrastructure.Storage;
 using Microsoft.Azure.Functions.Worker;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 
 var host = new HostBuilder()
+    .ConfigureAppConfiguration((context, config) =>
+    {
+        config.AddJsonFile("appsettings.json", optional: true);
+        config.AddJsonFile($"appsettings.{context.HostingEnvironment.EnvironmentName}.json", optional: true);
+    })
     .ConfigureFunctionsWorkerDefaults()
     .ConfigureServices((context, services) =>
     {

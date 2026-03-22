@@ -17,6 +17,11 @@ public class SyncService(
     IOptions<SyncOptions> syncOptions,
     ILogger<SyncService> logger) : ISyncService
 {
+    /// <summary>
+    /// 1. Freshness gate — skip if last sync is within DataFreshness.
+    /// 2. Fetch all entries, parse each (skip on failure), upsert to Table Storage.
+    /// 3. Record sync metadata (CompletedAt, count, errors).
+    /// </summary>
     public async Task SyncAsync(CancellationToken cancellationToken = default)
     {
         var now = DateTime.UtcNow;

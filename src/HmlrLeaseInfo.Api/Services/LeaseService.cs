@@ -5,6 +5,7 @@ using HmlrLeaseInfo.Api.Interfaces;
 using HmlrLeaseInfo.Api.Models;
 using HmlrLeaseInfo.Core.Configuration;
 using HmlrLeaseInfo.Core.Interfaces;
+using HmlrLeaseInfo.Core.Models;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
 
@@ -19,6 +20,11 @@ public class LeaseService(
     QueueClient queueClient,
     IOptions<SyncOptions> syncOptions) : ILeaseService
 {
+    /// <summary>
+    /// 1. Cache/repo lookup — found → 200 (silently re-syncs if data is stale).
+    /// 2. Not found + sync fresh → 404.
+    /// 3. Not found + sync stale or missing → enqueue sync → 202.
+    /// </summary>
     public async Task<IResult> GetLeaseAsync(string titleNumber, CancellationToken cancellationToken = default)
     {
         var options = syncOptions.Value;
@@ -30,22 +36,58 @@ public class LeaseService(
             cancellationToken: cancellationToken);
 
         if (lease is not null)
+        {
+            await EnqueueIfSyncStale(options, cancellationToken);
             return Results.Ok(lease);
+        }
 
+        // HybridCache caches null by default — remove so next call re-queries the repo
         await cache.RemoveAsync($"lease:{titleNumber}", cancellationToken);
 
         var syncMetadata = await syncMetadataRepository.GetAsync(cancellationToken);
 
-        if (syncMetadata?.CompletedAt is not null
-            && DateTime.UtcNow - syncMetadata.CompletedAt.Value < options.DataFreshness)
+        if (!IsSyncStale(syncMetadata, options))
         {
             return Results.NotFound(new LeaseResponse(
                 "Entry not present as of last sync.",
-                LastSyncAt: syncMetadata.CompletedAt));
+                LastSyncAt: syncMetadata!.CompletedAt));
         }
 
-        await queueClient.SendMessageAsync("sync", cancellationToken);
+        await EnqueueSyncThrottled(options, cancellationToken);
+
         return Results.Accepted(value: new LeaseResponse(
             "Data is being synced. Please retry shortly."));
+    }
+
+    private static bool IsSyncStale(SyncMetadata? syncMetadata, SyncOptions options) =>
+        syncMetadata?.CompletedAt is null
+        || DateTime.UtcNow - syncMetadata.CompletedAt.Value >= options.DataFreshness;
+
+    private async Task EnqueueSyncThrottled(SyncOptions options, CancellationToken cancellationToken)
+    {
+        await cache.GetOrCreateAsync(
+            "sync-requested",
+            async ct =>
+            {
+                await queueClient.SendMessageAsync("sync", ct);
+                return true;
+            },
+            new HybridCacheEntryOptions { Expiration = options.RequestThrottle },
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task EnqueueIfSyncStale(SyncOptions options, CancellationToken cancellationToken)
+    {
+        await cache.GetOrCreateAsync(
+            "sync-requested",
+            async ct =>
+            {
+                var syncMetadata = await syncMetadataRepository.GetAsync(ct);
+                if (IsSyncStale(syncMetadata, options))
+                    await queueClient.SendMessageAsync("sync", ct);
+                return true;
+            },
+            new HybridCacheEntryOptions { Expiration = options.RequestThrottle },
+            cancellationToken: cancellationToken);
     }
 }

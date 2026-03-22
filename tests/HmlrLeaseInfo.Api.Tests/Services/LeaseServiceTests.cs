@@ -41,18 +41,49 @@ public class LeaseServiceTests
             Options.Create(_syncOptions));
     }
 
+    /// <summary>
+    /// Lease exists and sync is fresh → 200 with data, no background enqueue.
+    /// </summary>
     [Fact]
-    public async Task GetLeaseAsync_RepoHasEntry_Returns200WithData()
+    public async Task GetLeaseAsync_LeaseExists_FreshSync_Returns200WithoutEnqueue()
     {
-        var entry = CreateTestEntry("EGL557357");
         _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
-            .Returns(entry);
+            .Returns(CreateTestEntry("EGL557357"));
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns(new SyncMetadata(
+                CompletedAt: DateTime.UtcNow,
+                EntriesProcessed: 5,
+                ErrorMessage: null));
 
         var service = CreateService();
         var result = await service.GetLeaseAsync("EGL557357");
 
         var ok = result.Should().BeOfType<Ok<ParsedNoticeOfLease>>().Subject;
         ok.Value!.LesseesTitle.Should().Be("EGL557357");
+        await _queueClient.DidNotReceive().SendMessageAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
+    /// Lease exists but sync is stale → still 200, but silently enqueues a background sync.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaseAsync_LeaseExists_StaleSync_Returns200AndEnqueues()
+    {
+        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
+            .Returns(CreateTestEntry("EGL557357"));
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns(new SyncMetadata(
+                CompletedAt: DateTime.UtcNow.AddMinutes(-60),
+                EntriesProcessed: 5,
+                ErrorMessage: null));
+
+        var service = CreateService();
+        var result = await service.GetLeaseAsync("EGL557357");
+
+        result.Should().BeOfType<Ok<ParsedNoticeOfLease>>();
+        await _queueClient.Received(1).SendMessageAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
     /// <summary>
@@ -124,6 +155,26 @@ public class LeaseServiceTests
     }
 
     /// <summary>
+    /// First 202 enqueues a sync message, second 202 within RequestThrottle window should not enqueue again.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaseAsync_SecondRequestWithinThrottle_DoesNotEnqueueAgain()
+    {
+        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
+            .Returns((ParsedNoticeOfLease?)null);
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns((SyncMetadata?)null);
+
+        var service = CreateService();
+
+        await service.GetLeaseAsync("EGL557357");
+        await service.GetLeaseAsync("EGL557357");
+
+        await _queueClient.Received(1).SendMessageAsync(
+            Arg.Any<string>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>
     /// Repo returns null (triggers 202), then returns data on next call → should get 200, not cached null.
     /// </summary>
     [Fact]
@@ -141,6 +192,11 @@ public class LeaseServiceTests
 
         _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
             .Returns(CreateTestEntry("EGL557357"));
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns(new SyncMetadata(
+                CompletedAt: DateTime.UtcNow,
+                EntriesProcessed: 5,
+                ErrorMessage: null));
 
         var second = await service.GetLeaseAsync("EGL557357");
         second.Should().BeOfType<Ok<ParsedNoticeOfLease>>()

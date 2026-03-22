@@ -6,8 +6,8 @@ namespace HmlrLeaseInfo.Api.Interfaces;
 public interface ILeaseService
 {
     /// <summary>
-    /// Retrieves a lease by title number, returning the appropriate HTTP result
-    /// (200 with data, 202 if syncing, 404 if not found after fresh sync).
+    /// Retrieves a lease by title number. Returns an IResult to allow multiple
+    /// response types depending on data availability and sync state.
     /// </summary>
     Task<IResult> GetLeaseAsync(string titleNumber, CancellationToken cancellationToken = default);
 }

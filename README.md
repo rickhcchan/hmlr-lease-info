@@ -81,19 +81,7 @@ dotnet build HmlrLeaseInfo.sln
 
 ### 3. Configure the mock HMLR API connection
 
-The Azure Function needs to know where the mock API is running. Edit `src/HmlrLeaseInfo.Functions/local.settings.json`:
-
-```json
-{
-  "Values": {
-    "HmlrApi__BaseUrl": "http://localhost:5203",
-    "HmlrApi__Username": "username",
-    "HmlrApi__Password": "password"
-  }
-}
-```
-
-Adjust `BaseUrl` if the mock API runs on a different port. Check the mock API's `Properties/launchSettings.json` for the correct port.
+The Azure Function needs to know where the mock API is running. Check `src/HmlrLeaseInfo.Functions/local.settings.json` and adjust `HmlrApi__BaseUrl` if the mock API runs on a different port (see the mock API's `Properties/launchSettings.json`).
 
 ## Running
 
@@ -102,7 +90,7 @@ Start each service in a separate terminal, in this order:
 ```bash
 # 1. Azurite (Azure Storage emulator)
 #    --skipApiVersionCheck avoids version mismatches between the Azure SDK and Azurite
-azurite --silent --skipApiVersionCheck
+azurite --skipApiVersionCheck
 
 # 2. HMLR Mock API (provided project)
 cd <path-to-mock-api>/HmlrApi && dotnet run
@@ -142,26 +130,28 @@ dotnet test tests/HmlrLeaseInfo.Api.Tests/
 dotnet test tests/HmlrLeaseInfo.Functions.Tests/
 
 # Infrastructure tests (requires Azurite running)
-azurite --silent --skipApiVersionCheck &
+azurite --skipApiVersionCheck &
 dotnet test tests/HmlrLeaseInfo.Infrastructure.Tests/
 ```
 
 ### End-to-end smoke test
 
-Start all four backend services (Azurite, mock API, Function, API) as described in [Running](#running), then:
+**Setup:** Start all four backend services with a clean database (no prior Azurite data) as described in [Running](#running). Dev config uses `DataFreshness: 2min`, `RequestThrottle: 1min` for faster testing.
+
+| # | Scenario | Command | Expected | Status |
+|---|----------|---------|----------|--------|
+| 1 | No auth header | `curl -s -o /dev/null -w "%{http_code}" http://localhost:5010/EGL557357` | `401` | PASS |
+| 2 | Wrong credentials | `curl -s -o /dev/null -w "%{http_code}" -u wrong:creds http://localhost:5010/EGL557357` | `401` | PASS |
+| 3 | First request (cold, never synced) | `curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357` | `202` — triggers async sync via queue | PASS |
+| 4 | Retry after sync completes (~5s) | Same as #3 | `200` — returns parsed lease data | PASS |
+| 5 | All five title numbers | Loop below | All `200` — sync fetches all entries in one pass | PASS |
+| 6 | Non-existent title (fresh sync) | `curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/NONEXISTENT` | `404` with `lastSyncAt` timestamp | PASS |
+| 7 | Existing title after DataFreshness expires (2min) | Same as #3, wait 2+ minutes | `200` — stale-while-revalidate returns cached data, silently re-syncs | PASS |
+| 8 | Immediate follow-up (within RequestThrottle) | Same as #3 | `200` — no duplicate queue message (throttled) | PASS |
+
+**Test #5 — all titles:**
 
 ```bash
-# Step 1: First request — expect 202 (triggers sync)
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357
-# {"message":"Data is being synced. Please retry shortly.","lastSyncAt":null}
-# HTTP 202
-
-# Step 2: Wait a few seconds for the sync to complete, then retry — expect 200
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357
-# {"entryNumber":1,"entryDate":null,...,"lesseesTitle":"EGL557357","notes":[]}
-# HTTP 200
-
-# Step 3: All five title numbers from the mock API should return 200
 for t in EGL557357 TGL24029 TGL27196 TGL383606 TGL513556; do
   echo -n "$t: "; curl -s -u username:password -o /dev/null -w "%{http_code}" http://localhost:5010/$t; echo
 done
@@ -170,38 +160,37 @@ done
 # TGL27196: 200
 # TGL383606: 200
 # TGL513556: 200
-
-# Step 4: Unknown title — expect 404
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/NONEXISTENT
-# {"message":"Entry not present as of last sync.","lastSyncAt":"..."}
-# HTTP 404
 ```
+
+**Key behaviours verified:**
+- Basic Auth rejects unauthenticated/invalid requests (tests 1–2)
+- Cold start triggers async sync, returns 202 until data is ready (tests 3–4)
+- Single sync populates all entries from the HMLR API (test 5)
+- Fresh sync returns 404 for absent titles instead of re-syncing (test 6)
+- Stale data triggers background re-sync while still returning 200 immediately (test 7)
+- Request throttle prevents duplicate queue messages within the throttle window (test 8)
 
 ## Configuration
 
-Sync timing is controlled by `SyncOptions`, shared between the API and Function:
+Sync timing is controlled by `SyncOptions` (values use `TimeSpan` format `hh:mm:ss`):
 
-| Setting | Default | Purpose |
-|---------|---------|---------|
-| `DataFreshness` | `00:30:00` | How long parsed data is considered fresh. Controls cache TTL and re-sync triggers. |
-| `RequestThrottle` | `00:05:00` | Reserved for future request throttling. Not currently enforced. |
+| Setting | Default | Used by | Purpose |
+|---------|---------|---------|---------|
+| `DataFreshness` | `00:30:00` | API + Function | How long parsed data is considered fresh. Controls cache TTL, re-sync triggers, and the Function's freshness gate. |
+| `RequestThrottle` | `00:05:00` | API only | Minimum interval between queue messages. Prevents flooding the queue with duplicate sync requests. |
 
-Values use `TimeSpan` format (`hh:mm:ss`). In the Function's `local.settings.json`, use double-underscore notation:
-
-```json
-"Sync__DataFreshness": "00:30:00",
-"Sync__RequestThrottle": "00:05:00"
-```
+Both projects use `appsettings.json` / `appsettings.Development.json` for sync config. Development overrides (`2min` / `1min`) are applied automatically when running locally.
 
 ## Beyond the Requirements
 
 Features added on top of the base task:
 
-- **Async sync via Azure Queue + Function** — non-blocking `202` response with queue-triggered background parsing
-- **HybridCache with stampede protection** — `GetOrCreateAsync` ensures only one factory runs per cache key, even under concurrent load
-- **2-layer sync protection** — single-instance Function (`batchSize: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
-- **Freshness-based re-sync** — stale data (> `DataFreshness`) returns 202 instead of 404, automatically triggering a re-sync
-- **Self-healing on failure** — queue auto-retries failed syncs; if all retries exhaust, normal API usage queues a fresh message
-- **Additive/update-only sync** — upserts by LesseesTitle, never deletes. Safe for legal documents that persist once published
-- **Vue 3 frontend** — search by title number with status handling (200/202/404)
-- **Configurable sync timing** — `SyncOptions` shared between API and Function with `TimeSpan` values
+- **HybridCache with stampede protection** — in-memory cache via `HybridCache`, using `GetOrCreateAsync` to ensure only one factory runs per cache key even under concurrent load. Built on the `HybridCache` framework so adding a distributed L2 cache (e.g. Redis) is a one-line change
+- **3-layer sync protection** — message-enqueue throttle (`HybridCache` deduplicates queue sends) → serial processing (`batchSize: 1`, `maxConcurrentCalls: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
+- **Freshness-aware lookup** — although the mock API currently returns a fixed set of notices, the API is designed to handle a growing dataset. Distinguishes between "title doesn't exist" (404 after fresh sync) and "title might not be synced yet" (202 with background re-sync). Ensures new notices of lease appearing in HMLR are picked up without manual intervention
+- **Stale-while-revalidate** — existing data returns 200 immediately while silently re-syncing in the background when stale. Prioritises availability over strict freshness
+
+## Potential Enhancements
+
+- **Distributed cache for scale-out** — The in-memory cache is per-process. If scaled to multiple API instances, each could enqueue duplicate sync messages. Adding a distributed L2 backend (e.g. Redis via `IDistributedCache`) would share cache state across instances. The Function's freshness gate still prevents duplicate syncs, so this is a robustness improvement, not a correctness fix.
+- **Last-sync timestamp in 200 responses** — include `lastSyncAt` in successful responses so the client can display how fresh the data is, especially when stale-while-revalidate serves older data.
