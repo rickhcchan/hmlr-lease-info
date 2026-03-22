@@ -42,7 +42,7 @@ public class SyncService(
                 {
                     parsed.Add(leaseParser.Parse(raw));
                 }
-                catch (Exception ex)
+                catch (FormatException ex)
                 {
                     skipped++;
                     logger.LogWarning(ex, "Failed to parse entry {EntryNumber}, skipping", raw.EntryNumber);

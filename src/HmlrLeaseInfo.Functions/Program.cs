@@ -33,7 +33,11 @@ var host = new HostBuilder()
             return new TableStorageSyncMetadataRepository(tableClient);
         });
 
-        services.AddHttpClient<IHmlrClient, HmlrApiClient>();
+        services.AddHttpClient<IHmlrClient, HmlrApiClient>((sp, client) =>
+        {
+            var settings = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<HmlrApiSettings>>().Value;
+            client.BaseAddress = new Uri(settings.BaseUrl);
+        });
         services.AddSingleton<ILeaseParser, LeaseParser>();
         services.AddScoped<ISyncService, SyncService>();
     })
