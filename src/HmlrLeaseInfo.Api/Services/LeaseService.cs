@@ -5,6 +5,7 @@ using HmlrLeaseInfo.Api.Interfaces;
 using HmlrLeaseInfo.Api.Models;
 using HmlrLeaseInfo.Core.Configuration;
 using HmlrLeaseInfo.Core.Interfaces;
+using HmlrLeaseInfo.Core.Models;
 using Microsoft.Extensions.Caching.Hybrid;
 using Microsoft.Extensions.Options;
 
@@ -40,12 +41,11 @@ public class LeaseService(
 
         var syncMetadata = await syncMetadataRepository.GetAsync(cancellationToken);
 
-        if (syncMetadata?.CompletedAt is not null
-            && DateTime.UtcNow - syncMetadata.CompletedAt.Value < options.DataFreshness)
+        if (!IsSyncStale(syncMetadata, options))
         {
             return Results.NotFound(new LeaseResponse(
                 "Entry not present as of last sync.",
-                LastSyncAt: syncMetadata.CompletedAt));
+                LastSyncAt: syncMetadata!.CompletedAt));
         }
 
         await EnqueueSyncThrottled(options, cancellationToken);
@@ -53,6 +53,10 @@ public class LeaseService(
         return Results.Accepted(value: new LeaseResponse(
             "Data is being synced. Please retry shortly."));
     }
+
+    private static bool IsSyncStale(SyncMetadata? syncMetadata, SyncOptions options) =>
+        syncMetadata?.CompletedAt is null
+        || DateTime.UtcNow - syncMetadata.CompletedAt.Value >= options.DataFreshness;
 
     private async Task EnqueueSyncThrottled(SyncOptions options, CancellationToken cancellationToken)
     {
@@ -74,9 +78,7 @@ public class LeaseService(
             async ct =>
             {
                 var syncMetadata = await syncMetadataRepository.GetAsync(ct);
-                var isStale = syncMetadata?.CompletedAt is null
-                              || DateTime.UtcNow - syncMetadata.CompletedAt.Value >= options.DataFreshness;
-                if (isStale)
+                if (IsSyncStale(syncMetadata, options))
                     await queueClient.SendMessageAsync("sync", ct);
                 return true;
             },
