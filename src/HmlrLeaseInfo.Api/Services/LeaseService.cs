@@ -19,7 +19,6 @@ public class LeaseService(
     QueueClient queueClient,
     IOptions<SyncOptions> syncOptions) : ILeaseService
 {
-    /// <inheritdoc />
     public async Task<IResult> GetLeaseAsync(string titleNumber, CancellationToken cancellationToken = default)
     {
         var options = syncOptions.Value;
