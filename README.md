@@ -113,11 +113,13 @@ cd src/HmlrLeaseInfo.Functions && func start
 # 4. REST API
 cd src/HmlrLeaseInfo.Api && dotnet run
 
-# 5. Vue frontend (optional — development server)
+# 5. Vue frontend (development server — no build needed)
 cd src/HmlrLeaseInfo.Web && npm run dev
 ```
 
-The API listens on `http://localhost:5000` by default.
+The API listens on `http://localhost:5000` by default. The Vue dev server runs on `http://localhost:5173` and proxies `/api` requests to the API.
+
+The API requires Basic Auth. Default development credentials are `username:password` (configured in `appsettings.Development.json`). The Vue frontend sends these automatically.
 
 ### Request flow
 
@@ -150,18 +152,18 @@ Start all four backend services (Azurite, mock API, Function, API) as described 
 
 ```bash
 # Step 1: First request — expect 202 (triggers sync)
-curl -s -w "\nHTTP %{http_code}\n" http://localhost:5000/EGL557357
+curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5000/EGL557357
 # {"message":"Data is being synced. Please retry shortly.","lastSyncAt":null}
 # HTTP 202
 
 # Step 2: Wait a few seconds for the sync to complete, then retry — expect 200
-curl -s -w "\nHTTP %{http_code}\n" http://localhost:5000/EGL557357
+curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5000/EGL557357
 # {"entryNumber":1,"entryDate":null,...,"lesseesTitle":"EGL557357","notes":[]}
 # HTTP 200
 
 # Step 3: All five title numbers from the mock API should return 200
 for t in EGL557357 TGL24029 TGL27196 TGL383606 TGL513556; do
-  echo -n "$t: "; curl -s -o /dev/null -w "%{http_code}" http://localhost:5000/$t; echo
+  echo -n "$t: "; curl -s -u username:password -o /dev/null -w "%{http_code}" http://localhost:5000/$t; echo
 done
 # EGL557357: 200
 # TGL24029: 200
@@ -170,7 +172,7 @@ done
 # TGL513556: 200
 
 # Step 4: Unknown title — expect 404
-curl -s -w "\nHTTP %{http_code}\n" http://localhost:5000/NONEXISTENT
+curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5000/NONEXISTENT
 # {"message":"Entry not present as of last sync.","lastSyncAt":"..."}
 # HTTP 404
 ```
