@@ -22,7 +22,6 @@ builder.Services.AddSingleton<ILeaseRepository>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<StorageSettings>>().Value;
     var tableClient = new TableClient(settings.ConnectionString, "Leases");
-    tableClient.CreateIfNotExists();
     return new TableStorageLeaseRepository(tableClient);
 });
 
@@ -30,7 +29,6 @@ builder.Services.AddSingleton<ISyncMetadataRepository>(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<StorageSettings>>().Value;
     var tableClient = new TableClient(settings.ConnectionString, "Sync");
-    tableClient.CreateIfNotExists();
     return new TableStorageSyncMetadataRepository(tableClient);
 });
 
@@ -38,7 +36,6 @@ builder.Services.AddSingleton(sp =>
 {
     var settings = sp.GetRequiredService<IOptions<StorageSettings>>().Value;
     var queueClient = new QueueClient(settings.ConnectionString, "sync-requests");
-    queueClient.CreateIfNotExists();
     return queueClient;
 });
 
@@ -53,7 +50,4 @@ app.MapGet("/{titleNumber}", async (string titleNumber, ILeaseService leaseServi
 
 app.Run();
 
-/// <summary>
-/// Entry point marker for WebApplicationFactory integration tests.
-/// </summary>
 public partial class Program;
