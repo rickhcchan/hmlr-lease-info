@@ -19,13 +19,14 @@ public class SyncService(
 {
     public async Task SyncAsync(CancellationToken cancellationToken = default)
     {
+        var now = DateTime.UtcNow;
         var options = syncOptions.Value;
         var metadata = await syncMetadataRepository.GetAsync(cancellationToken);
 
         if (metadata?.CompletedAt is not null
-            && DateTime.UtcNow - metadata.CompletedAt.Value < options.DataFreshness)
+            && now - metadata.CompletedAt.Value < options.DataFreshness)
         {
-            logger.LogInformation("Sync skipped — last sync completed {Ago} ago", DateTime.UtcNow - metadata.CompletedAt.Value);
+            logger.LogInformation("Sync skipped — last sync completed {Ago} ago", now - metadata.CompletedAt.Value);
             return;
         }
 
@@ -53,7 +54,7 @@ public class SyncService(
 
             await syncMetadataRepository.UpdateAsync(
                 new Core.Models.SyncMetadata(
-                    CompletedAt: DateTime.UtcNow,
+                    CompletedAt: now,
                     EntriesProcessed: parsed.Count,
                     ErrorMessage: skipped > 0 ? $"{skipped} skipped due to parse errors" : null),
                 cancellationToken);
