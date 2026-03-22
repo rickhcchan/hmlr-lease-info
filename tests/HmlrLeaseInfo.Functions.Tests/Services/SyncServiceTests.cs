@@ -86,10 +86,10 @@ public class SyncServiceTests
     }
 
     /// <summary>
-    /// Fetches raw entries, parses each one, and upserts all parsed results.
+    /// Fetches raw entries, parses each one, upserts all, and updates metadata.
     /// </summary>
     [Fact]
-    public async Task SyncAsync_FetchesSchedules_ParsesAll_UpsertsToRepo()
+    public async Task SyncAsync_HappyPath_UpsertsAndUpdatesSyncMetadata()
     {
         _syncRepo.GetAsync(Arg.Any<CancellationToken>())
             .Returns((SyncMetadata?)null);
@@ -99,10 +99,8 @@ public class SyncServiceTests
         _hmlrClient.GetSchedulesAsync(Arg.Any<CancellationToken>())
             .Returns(new[] { raw1, raw2 });
 
-        var parsed1 = CreateParsedEntry("TGL1");
-        var parsed2 = CreateParsedEntry("TGL2");
-        _leaseParser.Parse(raw1).Returns(parsed1);
-        _leaseParser.Parse(raw2).Returns(parsed2);
+        _leaseParser.Parse(raw1).Returns(CreateParsedEntry("TGL1"));
+        _leaseParser.Parse(raw2).Returns(CreateParsedEntry("TGL2"));
 
         var service = CreateService();
         await service.SyncAsync();
@@ -110,29 +108,10 @@ public class SyncServiceTests
         await _leaseRepo.Received(1).UpsertParsedAsync(
             Arg.Is<IEnumerable<ParsedNoticeOfLease>>(e => e.Count() == 2),
             Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
-    /// After a successful sync, updates metadata with CompletedAt and entry count.
-    /// </summary>
-    [Fact]
-    public async Task SyncAsync_UpdatesSyncMetadata_WithCompletedAtAndCount()
-    {
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns((SyncMetadata?)null);
-
-        var raw = CreateRawEntry("1");
-        _hmlrClient.GetSchedulesAsync(Arg.Any<CancellationToken>())
-            .Returns(new[] { raw });
-        _leaseParser.Parse(raw).Returns(CreateParsedEntry("TGL1"));
-
-        var service = CreateService();
-        await service.SyncAsync();
-
         await _syncRepo.Received(1).UpdateAsync(
             Arg.Is<SyncMetadata>(m =>
                 m.CompletedAt != null &&
-                m.EntriesProcessed == 1 &&
+                m.EntriesProcessed == 2 &&
                 m.ErrorMessage == null),
             Arg.Any<CancellationToken>());
     }
