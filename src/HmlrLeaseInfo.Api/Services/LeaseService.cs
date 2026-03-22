@@ -20,10 +20,11 @@ public class LeaseService(
     QueueClient queueClient,
     IOptions<SyncOptions> syncOptions) : ILeaseService
 {
-    // Flow:
-    // 1. Cache/repo lookup → found → 200 (silently re-syncs if stale)
-    // 2. Not found + sync fresh → 404
-    // 3. Not found + sync stale/missing → enqueue sync → 202
+    /// <summary>
+    /// 1. Cache/repo lookup — found → 200 (silently re-syncs if data is stale).
+    /// 2. Not found + sync fresh → 404.
+    /// 3. Not found + sync stale or missing → enqueue sync → 202.
+    /// </summary>
     public async Task<IResult> GetLeaseAsync(string titleNumber, CancellationToken cancellationToken = default)
     {
         var options = syncOptions.Value;
