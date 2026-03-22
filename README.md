@@ -81,19 +81,7 @@ dotnet build HmlrLeaseInfo.sln
 
 ### 3. Configure the mock HMLR API connection
 
-The Azure Function needs to know where the mock API is running. Edit `src/HmlrLeaseInfo.Functions/local.settings.json`:
-
-```json
-{
-  "Values": {
-    "HmlrApi__BaseUrl": "http://localhost:5203",
-    "HmlrApi__Username": "username",
-    "HmlrApi__Password": "password"
-  }
-}
-```
-
-Adjust `BaseUrl` if the mock API runs on a different port. Check the mock API's `Properties/launchSettings.json` for the correct port.
+The Azure Function needs to know where the mock API is running. Check `src/HmlrLeaseInfo.Functions/local.settings.json` and adjust `HmlrApi__BaseUrl` if the mock API runs on a different port (see the mock API's `Properties/launchSettings.json`).
 
 ## Running
 
@@ -184,19 +172,14 @@ done
 
 ## Configuration
 
-Sync timing is controlled by `SyncOptions`, shared between the API and Function:
+Sync timing is controlled by `SyncOptions` (values use `TimeSpan` format `hh:mm:ss`):
 
-| Setting | Default | Purpose |
-|---------|---------|---------|
-| `DataFreshness` | `00:30:00` | How long parsed data is considered fresh. Controls cache TTL and re-sync triggers. |
-| `RequestThrottle` | `00:05:00` | Minimum interval between queue messages. Prevents flooding the queue with duplicate sync requests. |
+| Setting | Default | Used by | Purpose |
+|---------|---------|---------|---------|
+| `DataFreshness` | `00:30:00` | API + Function | How long parsed data is considered fresh. Controls cache TTL, re-sync triggers, and the Function's freshness gate. |
+| `RequestThrottle` | `00:05:00` | API only | Minimum interval between queue messages. Prevents flooding the queue with duplicate sync requests. |
 
-Values use `TimeSpan` format (`hh:mm:ss`). In the Function's `local.settings.json`, use double-underscore notation:
-
-```json
-"Sync__DataFreshness": "00:30:00",
-"Sync__RequestThrottle": "00:05:00"
-```
+Both projects use `appsettings.json` / `appsettings.Development.json` for sync config. Development overrides (`2min` / `1min`) are applied automatically when running locally.
 
 ## Beyond the Requirements
 
@@ -210,7 +193,7 @@ Features added on top of the base task:
 - **Additive/update-only sync** — upserts by LesseesTitle, never deletes. Safe for legal documents that persist once published
 - **Vue 3 frontend** — search by title number with status handling (200/202/404)
 - **Stale-while-revalidate** — existing data returns 200 immediately while silently re-syncing in the background when stale
-- **Configurable sync timing** — `SyncOptions` shared between API and Function with `TimeSpan` values
+- **Configurable sync timing** — `SyncOptions` with `appsettings.json` per project; development overrides for faster local testing
 
 ## Potential Enhancements
 

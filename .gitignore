@@ -30,8 +30,7 @@ Thumbs.db
 TestResults/
 *.trx
 
-# Azure Functions
-local.settings.json
+# Azure Functions — local.settings.json tracked (dev-only, no secrets)
 
 # Azurite
 __azurite_db_*
