@@ -186,14 +186,11 @@ Both projects use `appsettings.json` / `appsettings.Development.json` for sync c
 Features added on top of the base task:
 
 - **HybridCache with stampede protection** — in-memory cache via `HybridCache`, using `GetOrCreateAsync` to ensure only one factory runs per cache key even under concurrent load. Built on the `HybridCache` framework so adding a distributed L2 cache (e.g. Redis) is a one-line change
-- **3-layer sync protection** — API request throttle (`HybridCache` deduplicates queue sends) → single-instance Function (`batchSize: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
-- **Freshness-based re-sync** — stale data (> `DataFreshness`) returns 202 instead of 404, automatically triggering a re-sync
-- **Self-healing on failure** — queue auto-retries failed syncs; if all retries exhaust, normal API usage queues a fresh message
-- **Additive/update-only sync** — upserts by LesseesTitle, never deletes. Safe for legal documents that persist once published
-- **Vue 3 frontend** — search by title number with status handling (200/202/404)
-- **Stale-while-revalidate** — existing data returns 200 immediately while silently re-syncing in the background when stale
-- **Configurable sync timing** — `SyncOptions` with `appsettings.json` per project; development overrides for faster local testing
+- **3-layer sync protection** — message-enqueue throttle (`HybridCache` deduplicates queue sends) → serial processing (`batchSize: 1`, `maxConcurrentCalls: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
+- **Freshness-aware lookup** — although the mock API currently returns a fixed set of notices, the API is designed to handle a growing dataset. Distinguishes between "title doesn't exist" (404 after fresh sync) and "title might not be synced yet" (202 with background re-sync). Ensures new notices of lease appearing in HMLR are picked up without manual intervention
+- **Stale-while-revalidate** — existing data returns 200 immediately while silently re-syncing in the background when stale. Prioritises availability over strict freshness
 
 ## Potential Enhancements
 
 - **Distributed cache for scale-out** — The in-memory cache is per-process. If scaled to multiple API instances, each could enqueue duplicate sync messages. Adding a distributed L2 backend (e.g. Redis via `IDistributedCache`) would share cache state across instances. The Function's freshness gate still prevents duplicate syncs, so this is a robustness improvement, not a correctness fix.
+- **Last-sync timestamp in 200 responses** — include `lastSyncAt` in successful responses so the client can display how fresh the data is, especially when stale-while-revalidate serves older data.
