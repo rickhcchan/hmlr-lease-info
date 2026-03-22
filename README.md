@@ -90,7 +90,7 @@ Start each service in a separate terminal, in this order:
 ```bash
 # 1. Azurite (Azure Storage emulator)
 #    --skipApiVersionCheck avoids version mismatches between the Azure SDK and Azurite
-azurite --silent --skipApiVersionCheck
+azurite --skipApiVersionCheck
 
 # 2. HMLR Mock API (provided project)
 cd <path-to-mock-api>/HmlrApi && dotnet run
@@ -130,7 +130,7 @@ dotnet test tests/HmlrLeaseInfo.Api.Tests/
 dotnet test tests/HmlrLeaseInfo.Functions.Tests/
 
 # Infrastructure tests (requires Azurite running)
-azurite --silent --skipApiVersionCheck &
+azurite --skipApiVersionCheck &
 dotnet test tests/HmlrLeaseInfo.Infrastructure.Tests/
 ```
 
@@ -185,8 +185,7 @@ Both projects use `appsettings.json` / `appsettings.Development.json` for sync c
 
 Features added on top of the base task:
 
-- **Async sync via Azure Queue + Function** — non-blocking `202` response with queue-triggered background parsing
-- **HybridCache with stampede protection** — `GetOrCreateAsync` ensures only one factory runs per cache key, even under concurrent load
+- **HybridCache with stampede protection** — in-memory cache via `HybridCache`, using `GetOrCreateAsync` to ensure only one factory runs per cache key even under concurrent load. Built on the `HybridCache` framework so adding a distributed L2 cache (e.g. Redis) is a one-line change
 - **3-layer sync protection** — API request throttle (`HybridCache` deduplicates queue sends) → single-instance Function (`batchSize: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
 - **Freshness-based re-sync** — stale data (> `DataFreshness`) returns 202 instead of 404, automatically triggering a re-sync
 - **Self-healing on failure** — queue auto-retries failed syncs; if all retries exhaust, normal API usage queues a fresh message
@@ -197,4 +196,4 @@ Features added on top of the base task:
 
 ## Potential Enhancements
 
-- **Distributed cache for scale-out** — The API request throttle currently uses in-memory `HybridCache`, which is per-process. If scaled to multiple API instances, each could enqueue duplicate sync messages. Adding a distributed cache backend (e.g. Redis) is a one-line change since `HybridCache` supports L1 (memory) + L2 (distributed) out of the box. The Function's freshness gate still prevents duplicate syncs, so this is a robustness improvement, not a correctness fix.
+- **Distributed cache for scale-out** — The in-memory cache is per-process. If scaled to multiple API instances, each could enqueue duplicate sync messages. Adding a distributed L2 backend (e.g. Redis via `IDistributedCache`) would share cache state across instances. The Function's freshness gate still prevents duplicate syncs, so this is a robustness improvement, not a correctness fix.
