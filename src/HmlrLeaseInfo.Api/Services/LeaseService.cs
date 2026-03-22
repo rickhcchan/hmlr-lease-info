@@ -31,9 +31,7 @@ public class LeaseService(
 
         if (lease is not null)
         {
-            if (await IsSyncStale(options, cancellationToken))
-                await EnqueueSyncThrottled(options, cancellationToken);
-
+            await EnqueueIfSyncStale(options, cancellationToken);
             return Results.Ok(lease);
         }
 
@@ -56,13 +54,6 @@ public class LeaseService(
             "Data is being synced. Please retry shortly."));
     }
 
-    private async Task<bool> IsSyncStale(SyncOptions options, CancellationToken cancellationToken)
-    {
-        var syncMetadata = await syncMetadataRepository.GetAsync(cancellationToken);
-        return syncMetadata?.CompletedAt is null
-               || DateTime.UtcNow - syncMetadata.CompletedAt.Value >= options.DataFreshness;
-    }
-
     private async Task EnqueueSyncThrottled(SyncOptions options, CancellationToken cancellationToken)
     {
         await cache.GetOrCreateAsync(
@@ -70,6 +61,23 @@ public class LeaseService(
             async ct =>
             {
                 await queueClient.SendMessageAsync("sync", ct);
+                return true;
+            },
+            new HybridCacheEntryOptions { Expiration = options.RequestThrottle },
+            cancellationToken: cancellationToken);
+    }
+
+    private async Task EnqueueIfSyncStale(SyncOptions options, CancellationToken cancellationToken)
+    {
+        await cache.GetOrCreateAsync(
+            "sync-requested",
+            async ct =>
+            {
+                var syncMetadata = await syncMetadataRepository.GetAsync(ct);
+                var isStale = syncMetadata?.CompletedAt is null
+                              || DateTime.UtcNow - syncMetadata.CompletedAt.Value >= options.DataFreshness;
+                if (isStale)
+                    await queueClient.SendMessageAsync("sync", ct);
                 return true;
             },
             new HybridCacheEntryOptions { Expiration = options.RequestThrottle },

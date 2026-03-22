@@ -209,4 +209,9 @@ Features added on top of the base task:
 - **Self-healing on failure** — queue auto-retries failed syncs; if all retries exhaust, normal API usage queues a fresh message
 - **Additive/update-only sync** — upserts by LesseesTitle, never deletes. Safe for legal documents that persist once published
 - **Vue 3 frontend** — search by title number with status handling (200/202/404)
+- **Stale-while-revalidate** — existing data returns 200 immediately while silently re-syncing in the background when stale
 - **Configurable sync timing** — `SyncOptions` shared between API and Function with `TimeSpan` values
+
+## Potential Enhancements
+
+- **Distributed cache for scale-out** — The API request throttle currently uses in-memory `HybridCache`, which is per-process. If scaled to multiple API instances, each could enqueue duplicate sync messages. Adding a distributed cache backend (e.g. Redis) is a one-line change since `HybridCache` supports L1 (memory) + L2 (distributed) out of the box. The Function's freshness gate still prevents duplicate syncs, so this is a robustness improvement, not a correctness fix.
