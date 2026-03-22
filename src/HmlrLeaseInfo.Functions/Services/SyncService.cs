@@ -17,9 +17,6 @@ public class SyncService(
     IOptions<SyncOptions> syncOptions,
     ILogger<SyncService> logger) : ISyncService
 {
-    /// <summary>
-    /// Checks freshness gate, fetches and parses HMLR data, then persists results.
-    /// </summary>
     public Task SyncAsync(CancellationToken cancellationToken = default)
     {
         throw new NotImplementedException();
