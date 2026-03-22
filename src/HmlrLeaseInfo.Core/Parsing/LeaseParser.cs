@@ -5,15 +5,17 @@ using HmlrLeaseInfo.Core.Interfaces;
 using HmlrLeaseInfo.Core.Models;
 
 /// <summary>
-/// Parses raw HMLR schedule entries using a 3-step algorithm:
-/// 1. Extract trailing NOTE lines from the entry text.
-/// 2. Process tabular lines using fixed-width column rules (A/B/C/D).
-/// 3. Assemble column fragments into structured fields.
+/// Parses raw HMLR schedule entries into structured lease data using fixed-width column rules.
 /// </summary>
 public class LeaseParser : ILeaseParser
 {
     private static readonly Regex NotePattern = new(@"^NOTE(\s\d+)?\s*:", RegexOptions.Compiled);
 
+    /// <summary>
+    /// 1. Extract trailing NOTE lines from the entry text.
+    /// 2. Process tabular lines using fixed-width column rules.
+    /// 3. Assemble column fragments into structured fields.
+    /// </summary>
     public ParsedNoticeOfLease Parse(RawNoticeOfLease raw)
     {
         var (tabularLines, notes) = ExtractNotes(raw.EntryText);

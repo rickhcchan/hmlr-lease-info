@@ -8,7 +8,7 @@ namespace HmlrLeaseInfo.Core.Interfaces;
 public interface IHmlrClient
 {
     /// <summary>
-    /// Fetches all raw schedule entries from GET /schedules.
+    /// Fetches all raw schedule entries from the HMLR API.
     /// </summary>
     Task<IEnumerable<RawNoticeOfLease>> GetSchedulesAsync(CancellationToken cancellationToken = default);
 }
