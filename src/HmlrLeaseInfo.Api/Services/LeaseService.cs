@@ -32,6 +32,8 @@ public class LeaseService(
         if (lease is not null)
             return Results.Ok(lease);
 
+        await cache.RemoveAsync($"lease:{titleNumber}", cancellationToken);
+
         var syncMetadata = await syncMetadataRepository.GetAsync(cancellationToken);
 
         if (syncMetadata?.CompletedAt is not null

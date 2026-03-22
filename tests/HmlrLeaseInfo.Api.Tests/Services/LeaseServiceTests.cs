@@ -123,6 +123,30 @@ public class LeaseServiceTests
             Arg.Any<string>(), Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Repo returns null (triggers 202), then returns data on next call → should get 200, not cached null.
+    /// </summary>
+    [Fact]
+    public async Task GetLeaseAsync_RepoReturnsDataAfterSync_Returns200NotCachedNull()
+    {
+        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
+            .Returns((ParsedNoticeOfLease?)null);
+        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
+            .Returns((SyncMetadata?)null);
+
+        var service = CreateService();
+        var first = await service.GetLeaseAsync("EGL557357");
+        first.Should().BeAssignableTo<IStatusCodeHttpResult>()
+            .Which.StatusCode.Should().Be(202);
+
+        _leaseRepo.GetAsync("EGL557357", Arg.Any<CancellationToken>())
+            .Returns(CreateTestEntry("EGL557357"));
+
+        var second = await service.GetLeaseAsync("EGL557357");
+        second.Should().BeOfType<Ok<ParsedNoticeOfLease>>()
+            .Which.Value!.LesseesTitle.Should().Be("EGL557357");
+    }
+
     private static ParsedNoticeOfLease CreateTestEntry(string lesseesTitle)
     {
         return new ParsedNoticeOfLease(
