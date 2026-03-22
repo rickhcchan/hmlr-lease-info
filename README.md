@@ -117,7 +117,7 @@ cd src/HmlrLeaseInfo.Api && dotnet run
 cd src/HmlrLeaseInfo.Web && npm run dev
 ```
 
-The API listens on `http://localhost:5000` by default. The Vue dev server runs on `http://localhost:5173` and proxies `/api` requests to the API.
+The API listens on `http://localhost:5010` by default. The Vue dev server runs on `http://localhost:5173` and proxies `/api` requests to the API.
 
 The API requires Basic Auth. Default development credentials are `username:password` (configured in `appsettings.Development.json`). The Vue frontend sends these automatically.
 
@@ -152,18 +152,18 @@ Start all four backend services (Azurite, mock API, Function, API) as described 
 
 ```bash
 # Step 1: First request — expect 202 (triggers sync)
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5000/EGL557357
+curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357
 # {"message":"Data is being synced. Please retry shortly.","lastSyncAt":null}
 # HTTP 202
 
 # Step 2: Wait a few seconds for the sync to complete, then retry — expect 200
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5000/EGL557357
+curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/EGL557357
 # {"entryNumber":1,"entryDate":null,...,"lesseesTitle":"EGL557357","notes":[]}
 # HTTP 200
 
 # Step 3: All five title numbers from the mock API should return 200
 for t in EGL557357 TGL24029 TGL27196 TGL383606 TGL513556; do
-  echo -n "$t: "; curl -s -u username:password -o /dev/null -w "%{http_code}" http://localhost:5000/$t; echo
+  echo -n "$t: "; curl -s -u username:password -o /dev/null -w "%{http_code}" http://localhost:5010/$t; echo
 done
 # EGL557357: 200
 # TGL24029: 200
@@ -172,7 +172,7 @@ done
 # TGL513556: 200
 
 # Step 4: Unknown title — expect 404
-curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5000/NONEXISTENT
+curl -s -u username:password -w "\nHTTP %{http_code}\n" http://localhost:5010/NONEXISTENT
 # {"message":"Entry not present as of last sync.","lastSyncAt":"..."}
 # HTTP 404
 ```
@@ -184,7 +184,7 @@ Sync timing is controlled by `SyncOptions`, shared between the API and Function:
 | Setting | Default | Purpose |
 |---------|---------|---------|
 | `DataFreshness` | `00:30:00` | How long parsed data is considered fresh. Controls cache TTL and re-sync triggers. |
-| `RequestThrottle` | `00:05:00` | Minimum interval between queue messages to prevent flooding. |
+| `RequestThrottle` | `00:05:00` | Reserved for future request throttling. Not currently enforced. |
 
 Values use `TimeSpan` format (`hh:mm:ss`). In the Function's `local.settings.json`, use double-underscore notation:
 
@@ -199,7 +199,7 @@ Features added on top of the base task:
 
 - **Async sync via Azure Queue + Function** — non-blocking `202` response with queue-triggered background parsing
 - **HybridCache with stampede protection** — `GetOrCreateAsync` ensures only one factory runs per cache key, even under concurrent load
-- **3-layer sync protection** — API throttle (cache) → single-instance Function (`batchSize: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
+- **2-layer sync protection** — single-instance Function (`batchSize: 1`) → freshness gate (`CompletedAt` check). Prevents redundant syncs without complex distributed locking
 - **Freshness-based re-sync** — stale data (> `DataFreshness`) returns 202 instead of 404, automatically triggering a re-sync
 - **Self-healing on failure** — queue auto-retries failed syncs; if all retries exhaust, normal API usage queues a fresh message
 - **Additive/update-only sync** — upserts by LesseesTitle, never deletes. Safe for legal documents that persist once published
