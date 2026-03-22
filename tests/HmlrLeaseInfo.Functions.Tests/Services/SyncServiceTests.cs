@@ -139,10 +139,10 @@ public class SyncServiceTests
     }
 
     /// <summary>
-    /// When one entry fails to parse, the rest are still upserted.
+    /// When one entry fails to parse, skips it, upserts the rest, and notes skipped count in metadata.
     /// </summary>
     [Fact]
-    public async Task SyncAsync_SingleParseFailure_SkipsEntry_ProcessesRest()
+    public async Task SyncAsync_SingleParseFailure_SkipsEntryAndRecordsError()
     {
         _syncRepo.GetAsync(Arg.Any<CancellationToken>())
             .Returns((SyncMetadata?)null);
@@ -163,32 +163,10 @@ public class SyncServiceTests
         await _leaseRepo.Received(1).UpsertParsedAsync(
             Arg.Is<IEnumerable<ParsedNoticeOfLease>>(e => e.Count() == 2),
             Arg.Any<CancellationToken>());
-    }
-
-    /// <summary>
-    /// When entries are skipped due to parse failures, the error message notes the count.
-    /// </summary>
-    [Fact]
-    public async Task SyncAsync_SingleParseFailure_SetsErrorMessageWithSkippedInfo()
-    {
-        _syncRepo.GetAsync(Arg.Any<CancellationToken>())
-            .Returns((SyncMetadata?)null);
-
-        var raw1 = CreateRawEntry("1");
-        var raw2 = CreateRawEntry("2");
-        _hmlrClient.GetSchedulesAsync(Arg.Any<CancellationToken>())
-            .Returns(new[] { raw1, raw2 });
-
-        _leaseParser.Parse(raw1).Returns(CreateParsedEntry("TGL1"));
-        _leaseParser.Parse(raw2).Throws(new FormatException("Bad data"));
-
-        var service = CreateService();
-        await service.SyncAsync();
-
         await _syncRepo.Received(1).UpdateAsync(
             Arg.Is<SyncMetadata>(m =>
                 m.CompletedAt != null &&
-                m.EntriesProcessed == 1 &&
+                m.EntriesProcessed == 2 &&
                 m.ErrorMessage != null &&
                 m.ErrorMessage.Contains("1 skipped")),
             Arg.Any<CancellationToken>());
