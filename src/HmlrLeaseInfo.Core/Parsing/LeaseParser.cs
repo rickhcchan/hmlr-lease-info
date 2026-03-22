@@ -14,9 +14,6 @@ public class LeaseParser : ILeaseParser
 {
     private static readonly Regex NotePattern = new(@"^NOTE(\s\d+)?\s*:", RegexOptions.Compiled);
 
-    /// <summary>
-    /// Parses a raw notice of lease into its structured fields.
-    /// </summary>
     public ParsedNoticeOfLease Parse(RawNoticeOfLease raw)
     {
         var (tabularLines, notes) = ExtractNotes(raw.EntryText);

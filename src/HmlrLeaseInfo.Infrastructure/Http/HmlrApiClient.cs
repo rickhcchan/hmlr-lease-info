@@ -13,9 +13,6 @@ using Microsoft.Extensions.Options;
 /// </summary>
 public class HmlrApiClient(HttpClient httpClient, IOptions<HmlrApiSettings> options) : IHmlrClient
 {
-    /// <summary>
-    /// Fetches all raw schedule entries from GET /schedules.
-    /// </summary>
     public async Task<IEnumerable<RawNoticeOfLease>> GetSchedulesAsync(CancellationToken cancellationToken = default)
     {
         var settings = options.Value;

@@ -70,7 +70,7 @@ public class TableStorageSyncMetadataRepositoryTests
             var result = await repository.GetAsync();
 
             result.Should().NotBeNull();
-            result!.CompletedAt.Should().BeCloseTo(now, TimeSpan.FromSeconds(1));
+            result!.CompletedAt.Should().Be(now);
         }
         finally { await tableClient.DeleteAsync(); }
     }
