@@ -9,6 +9,7 @@ using HmlrLeaseInfo.Api.Interfaces;
 using HmlrLeaseInfo.Core.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using NSubstitute;
 
@@ -25,6 +26,14 @@ public class LeaseEndpointTests : IClassFixture<WebApplicationFactory<Program>>
     {
         return _factory.WithWebHostBuilder(builder =>
         {
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Auth:Username"] = "username",
+                    ["Auth:Password"] = "password",
+                });
+            });
             builder.ConfigureServices(services =>
             {
                 services.AddScoped(_ => leaseService);
@@ -90,8 +99,8 @@ public class LeaseEndpointTests : IClassFixture<WebApplicationFactory<Program>>
         request.Headers.Authorization = BasicAuth("username", "password");
         var response = await client.SendAsync(request);
 
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
         var result = await response.Content.ReadFromJsonAsync<ParsedNoticeOfLease>();
-        result.Should().NotBeNull();
         result!.LesseesTitle.Should().Be("EGL557357");
     }
 }

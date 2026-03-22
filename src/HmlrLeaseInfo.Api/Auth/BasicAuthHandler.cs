@@ -43,6 +43,9 @@ public class BasicAuthHandler(
             return Task.FromResult(AuthenticateResult.Fail("Invalid credentials format"));
 
         var settings = authSettings.Value;
+        if (string.IsNullOrEmpty(settings.Username) || string.IsNullOrEmpty(settings.Password))
+            return Task.FromResult(AuthenticateResult.Fail("Authentication is not configured"));
+
         if (parts[0] != settings.Username || parts[1] != settings.Password)
             return Task.FromResult(AuthenticateResult.Fail("Invalid credentials"));
 
